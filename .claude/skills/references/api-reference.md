@@ -182,13 +182,14 @@ curl "https://cloud.zectrix.com/open/v1/devices/AA:BB:CC:DD:EE:FF/display/text" 
 |------|------|------|------|
 | title | string | 否 | 标题文本(最多200字)，与body至少填一项 |
 | body | string | 否 | 正文内容(最多5000字)，支持换行 |
+| fontSize | integer | 否 | 字体大小(12-48，默认20) |
 | pageId | string | 否 | 页面编号(1-5)，指定后会持久化存储 |
 
 ```bash
 curl "https://cloud.zectrix.com/open/v1/devices/AA:BB:CC:DD:EE:FF/display/structured-text" \
   -H "X-API-Key: zt_your_key_here" \
   -H "Content-Type: application/json" \
-  -d '{"title":"今日计划","body":"1. 晨会 9:00\n2. 代码评审\n3. 发布上线"}'
+  -d '{"title":"今日计划","body":"1. 晨会 9:00\n2. 代码评审\n3. 发布上线","fontSize":12}'
 ```
 
 ### DELETE /devices/{deviceId}/display/pages/{pageId} — 删除页面
