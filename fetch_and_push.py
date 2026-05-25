@@ -3,6 +3,7 @@
 Fetch latest messages from public Telegram channels and push to Zectrix e-ink device.
 """
 
+import argparse
 import json
 import os
 import sys
@@ -17,6 +18,10 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# Enable DEBUG logging if DEBUG env var is set
+if os.getenv("DEBUG"):
+    logger.setLevel(logging.DEBUG)
 
 ZECTRIX_BASE_URL = "https://cloud.zectrix.com/open/v1"
 TELEGRAM_WEB_URL = "https://t.me"
@@ -71,17 +76,26 @@ def fetch_latest_message(channel: str) -> Optional[str]:
 
         # Get the last (latest) message
         latest_message = messages[-1]
-        message_text_div = latest_message.find("div", class_="tgme_widget_message_text")
+        # Look for the main message text (not reply text)
+        message_text_div = latest_message.find("div", class_="js-message_text")
 
         if not message_text_div:
             logger.warning(f"Latest message in {channel} has no text")
             return None
 
+        logger.debug(f"Message div HTML: {str(message_text_div)[:500]}")
+
         # Replace <br/> tags with newlines
+        br_count = len(message_text_div.find_all("br"))
+        logger.debug(f"Found {br_count} <br/> tags in message")
+
         for br in message_text_div.find_all("br"):
             br.replace_with("\n")
 
-        message_text = message_text_div.get_text(strip=True)
+        message_text = message_text_div.get_text()
+
+        logger.debug(f"Raw message text: {repr(message_text[:200])}")
+        logger.debug(f"Newline count in message: {message_text.count(chr(10))}")
 
         if not message_text:
             logger.warning(f"Latest message in {channel} has no text")
@@ -137,6 +151,9 @@ def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bo
     title = lines[0][:200]  # First line as title, max 200 chars
     body = lines[1] if len(lines) > 1 else ""  # Rest as body
 
+    logger.debug(f"Page {page_id} - Title: {title}")
+    logger.debug(f"Page {page_id} - Body: {body}")
+
     payload = {
         "title": title,
         "body": body[:5000],  # Zectrix limit is 5000 chars
@@ -166,6 +183,10 @@ def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bo
 
 def main():
     """Main entry point."""
+    parser = argparse.ArgumentParser(description="Fetch Telegram messages and push to Zectrix device")
+    parser.add_argument("--dry-run", action="store_true", help="Generate content but do not push to device")
+    args = parser.parse_args()
+
     try:
         config = get_config()
     except ValueError as e:
@@ -177,6 +198,8 @@ def main():
     channels = config["channels"]
 
     logger.info(f"Starting fetch from {len(channels)} channels")
+    if args.dry_run:
+        logger.info("DRY RUN MODE: Content will be generated but not pushed")
 
     # Fetch messages from channels (max 5)
     messages = []
@@ -198,18 +221,31 @@ def main():
         logger.warning("No messages fetched from any channel")
         return
 
-    # Delete all pages first
-    logger.info("Deleting all existing pages")
-    if not delete_all_pages(api_key, device_id):
-        logger.error("Failed to delete pages, aborting push")
-        return
+    # Delete all pages first (skip in dry-run)
+    if not args.dry_run:
+        logger.info("Deleting all existing pages")
+        if not delete_all_pages(api_key, device_id):
+            logger.error("Failed to delete pages, aborting push")
+            return
+    else:
+        logger.info("[DRY RUN] Would delete all existing pages")
 
     # Push messages to pages 1-5
     for page_id, message_text in enumerate(messages, start=1):
+        lines = message_text.split('\n', 1)
+        title = lines[0][:200]
+        body = lines[1] if len(lines) > 1 else ""
+
         logger.info(f"Pushing message to page {page_id}")
-        success = push_to_zectrix(api_key, device_id, message_text, page_id)
-        if not success:
-            logger.warning(f"Failed to push message to page {page_id}")
+        logger.debug(f"Page {page_id} - Title: {title}")
+        logger.debug(f"Page {page_id} - Body: {body}")
+
+        if not args.dry_run:
+            success = push_to_zectrix(api_key, device_id, message_text, page_id)
+            if not success:
+                logger.warning(f"Failed to push message to page {page_id}")
+        else:
+            logger.info(f"[DRY RUN] Would push to page {page_id}")
 
     logger.info(f"Completed: pushed {len(messages)} messages to pages 1-{len(messages)}")
 
