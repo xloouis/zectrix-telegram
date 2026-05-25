@@ -94,6 +94,9 @@ def fetch_latest_message(channel: str) -> Optional[str]:
 
         message_text = message_text_div.get_text()
 
+        # Remove extra empty lines (replace multiple newlines with single newline)
+        message_text = "\n".join(line for line in message_text.split("\n") if line.strip())
+
         logger.debug(f"Raw message text: {repr(message_text[:200])}")
         logger.debug(f"Newline count in message: {message_text.count(chr(10))}")
 
@@ -138,7 +141,7 @@ def delete_all_pages(api_key: str, device_id: str) -> bool:
         return False
 
 
-def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bool:
+def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int, channel: str = "") -> bool:
     """Push text to Zectrix device on a specific page using structured-text."""
     url = f"{ZECTRIX_BASE_URL}/devices/{device_id}/display/structured-text"
     headers = {
@@ -146,17 +149,14 @@ def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bo
         "Content-Type": "application/json",
     }
 
-    # Split title and body
-    lines = text.split('\n', 1)
-    title = lines[0][:200]  # First line as title, max 200 chars
-    body = lines[1] if len(lines) > 1 else ""  # Rest as body
-
-    logger.debug(f"Page {page_id} - Title: {title}")
-    logger.debug(f"Page {page_id} - Body: {body}")
+    # Prepend channel name to body
+    body_text = text
+    if channel:
+        body_text = f"[{channel}] {text}"
 
     payload = {
-        "title": title,
-        "body": body[:5000],  # Zectrix limit is 5000 chars
+        "title": "",
+        "body": body_text[:5000],  # Zectrix limit is 5000 chars
         "fontSize": 12,
         "pageId": str(page_id),
     }
@@ -212,7 +212,7 @@ def main():
         message_text = fetch_latest_message(channel)
 
         if message_text:
-            messages.append(message_text)
+            messages.append((channel, message_text))
             logger.info(f"Added message from {channel} (total: {len(messages)})")
         else:
             logger.info(f"Skipping {channel} - no message text to push")
@@ -231,17 +231,12 @@ def main():
         logger.info("[DRY RUN] Would delete all existing pages")
 
     # Push messages to pages 1-5
-    for page_id, message_text in enumerate(messages, start=1):
-        lines = message_text.split('\n', 1)
-        title = lines[0][:200]
-        body = lines[1] if len(lines) > 1 else ""
-
-        logger.info(f"Pushing message to page {page_id}")
-        logger.debug(f"Page {page_id} - Title: {title}")
-        logger.debug(f"Page {page_id} - Body: {body}")
+    for page_id, (channel, message_text) in enumerate(messages, start=1):
+        logger.info(f"Pushing message from {channel} to page {page_id}")
+        logger.debug(f"Page {page_id} - Body: {message_text}")
 
         if not args.dry_run:
-            success = push_to_zectrix(api_key, device_id, message_text, page_id)
+            success = push_to_zectrix(api_key, device_id, message_text, page_id, channel)
             if not success:
                 logger.warning(f"Failed to push message to page {page_id}")
         else:
