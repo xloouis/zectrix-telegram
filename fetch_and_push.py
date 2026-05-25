@@ -94,8 +94,34 @@ def fetch_latest_message(channel: str) -> Optional[str]:
         return None
 
 
-def push_to_zectrix(api_key: str, device_id: str, text: str) -> bool:
-    """Push text to Zectrix device."""
+def delete_all_pages(api_key: str, device_id: str) -> bool:
+    """Delete all pages on the Zectrix device."""
+    url = f"{ZECTRIX_BASE_URL}/devices/{device_id}/display/pages"
+    headers = {
+        "X-API-Key": api_key,
+    }
+
+    try:
+        response = requests.delete(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        logger.info(f"Delete all pages response: {data}")
+
+        if data.get("code") == 0:
+            logger.info(f"Successfully deleted all pages on device {device_id}")
+            return True
+        else:
+            logger.error(f"Failed to delete pages: {data.get('msg', 'Unknown error')}")
+            return False
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to delete pages: {e}")
+        return False
+
+
+def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bool:
+    """Push text to Zectrix device on a specific page."""
     url = f"{ZECTRIX_BASE_URL}/devices/{device_id}/display/text"
     headers = {
         "X-API-Key": api_key,
@@ -104,6 +130,7 @@ def push_to_zectrix(api_key: str, device_id: str, text: str) -> bool:
     payload = {
         "text": text[:5000],  # Zectrix limit is 5000 chars
         "fontSize": 20,
+        "pageId": str(page_id),
     }
 
     try:
@@ -111,11 +138,14 @@ def push_to_zectrix(api_key: str, device_id: str, text: str) -> bool:
         response.raise_for_status()
 
         data = response.json()
+        logger.info(f"Zectrix API response for page {page_id}: {data}")
+
         if data.get("code") == 0:
-            logger.info(f"Successfully pushed to device {device_id}")
+            logger.info(f"Successfully pushed to device {device_id} on page {page_id}")
             return True
         else:
             logger.error(f"Zectrix API error: {data.get('msg', 'Unknown error')}")
+            logger.error(f"Full response: {data}")
             return False
 
     except requests.exceptions.RequestException as e:
@@ -137,18 +167,40 @@ def main():
 
     logger.info(f"Starting fetch from {len(channels)} channels")
 
+    # Fetch messages from channels (max 5)
+    messages = []
     for channel in channels:
+        if len(messages) >= 5:
+            logger.info("Reached maximum of 5 messages, stopping fetch")
+            break
+
         logger.info(f"Processing channel: {channel}")
         message_text = fetch_latest_message(channel)
 
         if message_text:
-            success = push_to_zectrix(api_key, device_id, message_text)
-            if not success:
-                logger.warning(f"Failed to push message from {channel}")
+            messages.append(message_text)
+            logger.info(f"Added message from {channel} (total: {len(messages)})")
         else:
             logger.info(f"Skipping {channel} - no message text to push")
 
-    logger.info("Completed")
+    if not messages:
+        logger.warning("No messages fetched from any channel")
+        return
+
+    # Delete all pages first
+    logger.info("Deleting all existing pages")
+    if not delete_all_pages(api_key, device_id):
+        logger.error("Failed to delete pages, aborting push")
+        return
+
+    # Push messages to pages 1-5
+    for page_id, message_text in enumerate(messages, start=1):
+        logger.info(f"Pushing message to page {page_id}")
+        success = push_to_zectrix(api_key, device_id, message_text, page_id)
+        if not success:
+            logger.warning(f"Failed to push message to page {page_id}")
+
+    logger.info(f"Completed: pushed {len(messages)} messages to pages 1-{len(messages)}")
 
 
 if __name__ == "__main__":
