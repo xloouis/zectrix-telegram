@@ -77,6 +77,10 @@ def fetch_latest_message(channel: str) -> Optional[str]:
             logger.warning(f"Latest message in {channel} has no text")
             return None
 
+        # Replace <br/> tags with newlines
+        for br in message_text_div.find_all("br"):
+            br.replace_with("\n")
+
         message_text = message_text_div.get_text(strip=True)
 
         if not message_text:
