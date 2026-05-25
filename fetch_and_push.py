@@ -129,7 +129,7 @@ def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bo
     }
     payload = {
         "text": text[:5000],  # Zectrix limit is 5000 chars
-        "fontSize": 20,
+        "fontSize": 12,
         "pageId": str(page_id),
     }
 
