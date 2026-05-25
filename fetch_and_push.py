@@ -69,8 +69,8 @@ def fetch_latest_message(channel: str) -> Optional[str]:
             logger.warning(f"No messages found in {channel}")
             return None
 
-        # Get the first (latest) message
-        latest_message = messages[0]
+        # Get the last (latest) message
+        latest_message = messages[-1]
         message_text_div = latest_message.find("div", class_="tgme_widget_message_text")
 
         if not message_text_div:
