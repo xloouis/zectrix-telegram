@@ -121,15 +121,21 @@ def delete_all_pages(api_key: str, device_id: str) -> bool:
 
 
 def push_to_zectrix(api_key: str, device_id: str, text: str, page_id: int) -> bool:
-    """Push text to Zectrix device on a specific page."""
-    url = f"{ZECTRIX_BASE_URL}/devices/{device_id}/display/text"
+    """Push text to Zectrix device on a specific page using structured-text."""
+    url = f"{ZECTRIX_BASE_URL}/devices/{device_id}/display/structured-text"
     headers = {
         "X-API-Key": api_key,
         "Content-Type": "application/json",
     }
+
+    # Split title and body
+    lines = text.split('\n', 1)
+    title = lines[0][:200]  # First line as title, max 200 chars
+    body = lines[1] if len(lines) > 1 else ""  # Rest as body
+
     payload = {
-        "text": text[:5000],  # Zectrix limit is 5000 chars
-        "fontSize": 12,
+        "title": title,
+        "body": body[:5000],  # Zectrix limit is 5000 chars
         "pageId": str(page_id),
     }
 
